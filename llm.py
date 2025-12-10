@@ -8,7 +8,22 @@ GLOBAL_LLM = None
 class LLM:
     def __init__(self, api_key: str = None, base_url: str = None, model: str = None,lang: str = "English"):
         if api_key:
-            self.llm = OpenAI(api_key=api_key, base_url=base_url)
+            # --- 修复 1: 添加浏览器伪装头 ---
+            # 这是一个标准的 Chrome User-Agent，用于欺骗 WAF 防火墙
+            fake_browser_headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": "https://www.google.com/"
+            }
+            
+            # 初始化 OpenAI 客户端时注入 default_headers
+            self.llm = OpenAI(
+                api_key=api_key, 
+                base_url=base_url,
+                default_headers=fake_browser_headers
+            )
+            # self.llm = OpenAI(api_key=api_key, base_url=base_url)
         else:
             self.llm = Llama.from_pretrained(
                 repo_id="Qwen/Qwen2.5-3B-Instruct-GGUF",
@@ -56,10 +71,15 @@ class LLM:
                     # response = self.llm.chat.completions.create(messages=messages, temperature=0, model=self.model)
                     break
                 except Exception as e:
+                    # 打印更详细的错误信息，包括响应体（如果有）
                     logger.error(f"Attempt {attempt + 1} failed: {e}")
                     if attempt == max_retries - 1:
                         raise
-                    sleep(3)
+                    sleep(5) # 延长重试等待时间，避免触发频率限制
+                    # logger.error(f"Attempt {attempt + 1} failed: {e}")
+                    # if attempt == max_retries - 1:
+                    #     raise
+                    # sleep(3)
             return response.choices[0].message.content
         else:
             response = self.llm.create_chat_completion(messages=messages,temperature=0)
