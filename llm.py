@@ -23,33 +23,32 @@ class LLM:
     def generate(self, messages: list[dict]) -> str:
         if isinstance(self.llm, OpenAI):
             max_retries = 3
-            # --- 修改开始：自定义参数配置 ---
-            # 1. 定义你的高级参数
-            # 注意：OpenAI官方SDK支持 reasoning_effort 参数，但其他非标参数建议放入 extra_body
+
+            # --- 核心修改开始 ---
+            # 1. 准备你的 Packycode 自定义参数
+            # 将 reasoning_effort, privacy, network 等所有非标参数都放入 extra_body
+            custom_body = {
+                "reasoning_effort": "high",  # 这里填你配置中的 high
+                "disable_response_storage": True,
+                "network_access": "enabled",
+                "model_verbosity": "high"
+            }
+
             request_kwargs = {
                 "messages": messages,
                 "model": self.model,
+                "extra_body": custom_body, # 关键：通过 extra_body 透传参数
             }
-            # 2. 判断是否为推理模型（根据你的模型名特征）
-            # 如果模型名包含 gpt-5, o1, o3 或 codex-max，通常被视为推理模型
-            is_reasoning_model = any(k in self.model.lower() for k in ["gpt-5", "o1-", "o3-", "reasoning", "codex-max"])
-            if is_reasoning_model:
-                # 推理模型通常不支持 temperature，或者需要设为 1 (视具体 provider 而定)
-                # 这里我们选择不传 temperature，让 API 使用默认值
-                request_kwargs["reasoning_effort"] = "high" # 或 "medium", "low". 注意：OpenAI SDK 这里的参数值通常是固定的
-            else:
-                # 普通模型保留原逻辑
-                request_kwargs["temperature"] = 0
 
-            # 3. 传递 packycode 特有的额外参数 (如下载响应存储、联网等)
-            # 使用 extra_body 可以将参数直接透传给 API JSON body
-            request_kwargs["extra_body"] = {
-                "disable_response_storage": True,
-                "network_access": "enabled",
-                # 如果SDK不识别 reasoning_effort，也可以把 reasoning_effort 放这里
-                # "reasoning_effort": "xhigh" 
-            }
+            # 2. 判断是否为推理模型（防止 temperature 报错）
+            # 如果是 gpt-5, o1, o3, codex-max 等推理模型，通常不能传 temperature
+            is_reasoning_model = any(k in self.model.lower() for k in ["gpt-5", "o1-", "o3-", "reasoning", "codex-max"])
+
+            if not is_reasoning_model:
+                # 只有非推理模型才加 temperature=0
+                request_kwargs["temperature"] = 0
             # --- 修改结束 ---
+            
             for attempt in range(max_retries):
                 try:
                     # 使用解包参数调用
